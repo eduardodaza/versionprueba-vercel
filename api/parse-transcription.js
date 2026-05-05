@@ -8,9 +8,10 @@ Campos por estudio:
 - nombre_paciente, tipo_estudio(TAC o RM), region, lateralidad("derecha"/"izquierda"/"bilateral" o null), es_contrastado(true/false)
 - datos_clinicos: indicación/diagnóstico, o ""
 - conclusiones: conclusiones/impresión diagnóstica, o ""
-- hallazgos: copia literal y completa de todo lo demás, sin omitir nada
+- hallazgos: copia el texto EXACTO tal como aparece en el dictado, sin cambiar ni una palabra, sin resumir, sin interpretar, incluyendo paréntesis, comparativos con estudios previos y tipo de tesla
 - plantilla_match: null
 - nombre_archivo_sugerido: nombre_paciente + tipo_estudio + region
+- Si el autor dice "se realiza análisis comparativo..." incluirlo textualmente en hallazgos
 
 REGLAS:
 - Extraer TODOS los estudios sin excepción
@@ -24,9 +25,10 @@ Campos por estudio:
 - nombre_paciente, tipo_estudio(TAC o RM), region, lateralidad("derecha"/"izquierda"/"bilateral" o null), es_contrastado(true/false)
 - datos_clinicos: indicación/diagnóstico, o ""
 - conclusiones: conclusiones/impresión diagnóstica, o ""
-- hallazgos: copia literal y completa de todo lo demás, sin omitir nada
+- hallazgos: copia el texto EXACTO tal como aparece en el dictado, sin cambiar ni una palabra, sin resumir, sin interpretar, incluyendo paréntesis, comparativos con estudios previos y tipo de tesla
 - plantilla_match: nombre exacto de la lista de plantillas disponibles, o null
 - nombre_archivo_sugerido: nombre_paciente + tipo_estudio + region
+- Si el autor dice "se realiza análisis comparativo..." incluirlo textualmente en hallazgos
 
 REGLAS:
 - Extraer TODOS los estudios sin excepción
