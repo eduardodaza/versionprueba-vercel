@@ -2,21 +2,22 @@ module.exports.config = {
   api: { bodyParser: { sizeLimit: '2mb' } },
 };
 
+// El LLM extrae solo campos estructurados cortos.
+// hallazgos se toma directamente del texto transcrito para garantizar literalidad 100%.
 const systemPromptManual = `Parser de transcripciones radiológicas. Extrae TODOS los estudios via tool call.
 
 Campos por estudio:
 - nombre_paciente, tipo_estudio(TAC o RM), region, lateralidad("derecha"/"izquierda"/"bilateral" o null), es_contrastado(true/false)
 - datos_clinicos: indicación/diagnóstico, o ""
 - conclusiones: conclusiones/impresión diagnóstica, o ""
-- hallazgos: copia el texto EXACTO tal como aparece en el dictado, sin cambiar ni una palabra, sin resumir, sin interpretar, incluyendo paréntesis, comparativos con estudios previos y tipo de tesla
+- hallazgos: ""
 - plantilla_match: null
 - nombre_archivo_sugerido: nombre_paciente + tipo_estudio + region
-- Si el autor dice "se realiza análisis comparativo..." incluirlo textualmente en hallazgos
+- char_start: posición en caracteres donde empieza este estudio en el texto
+- char_end: posición en caracteres donde termina este estudio en el texto
 
 REGLAS:
 - Extraer TODOS los estudios sin excepción
-- hallazgos = texto literal del dictado, sin resumir ni interpretar
-- Incluir SIEMPRE en hallazgos: contenido entre paréntesis, análisis comparativo con estudios previos, tipo de tesla utilizado
 - Campos vacíos = "" nunca null`;
 
 const systemPromptAuto = `Parser de transcripciones radiológicas. Extrae TODOS los estudios via tool call.
@@ -25,16 +26,15 @@ Campos por estudio:
 - nombre_paciente, tipo_estudio(TAC o RM), region, lateralidad("derecha"/"izquierda"/"bilateral" o null), es_contrastado(true/false)
 - datos_clinicos: indicación/diagnóstico, o ""
 - conclusiones: conclusiones/impresión diagnóstica, o ""
-- hallazgos: copia el texto EXACTO tal como aparece en el dictado, sin cambiar ni una palabra, sin resumir, sin interpretar, incluyendo paréntesis, comparativos con estudios previos y tipo de tesla
+- hallazgos: ""
 - plantilla_match: nombre exacto de la lista de plantillas disponibles, o null
 - nombre_archivo_sugerido: nombre_paciente + tipo_estudio + region
-- Si el autor dice "se realiza análisis comparativo..." incluirlo textualmente en hallazgos
+- char_start: posición en caracteres donde empieza este estudio en el texto
+- char_end: posición en caracteres donde termina este estudio en el texto
 
 REGLAS:
 - Extraer TODOS los estudios sin excepción
 - TAC → solo plantillas con "TAC". RM → solo plantillas con "RM" o "++RM". Nunca mezclar.
-- hallazgos = texto literal del dictado, sin resumir ni interpretar
-- Incluir SIEMPRE en hallazgos: contenido entre paréntesis, análisis comparativo con estudios previos, tipo de tesla utilizado
 - Campos vacíos = "" nunca null`;
 
 function encontrarPlantillaMasCercana(tipoEstudio, region, esContrastado, conclusiones, hallazgos, templateNames) {
@@ -143,8 +143,10 @@ const tools = [{
               datos_clinicos: { type: 'string' },
               plantilla_match: { type: ['string', 'null'] },
               nombre_archivo_sugerido: { type: 'string' },
+              char_start: { type: 'number' },
+              char_end: { type: 'number' },
             },
-            required: ['nombre_paciente','tipo_estudio','region','lateralidad','es_contrastado','hallazgos','conclusiones','datos_clinicos','plantilla_match','nombre_archivo_sugerido'],
+            required: ['nombre_paciente','tipo_estudio','region','lateralidad','es_contrastado','hallazgos','conclusiones','datos_clinicos','plantilla_match','nombre_archivo_sugerido','char_start','char_end'],
             additionalProperties: false,
           },
         },
@@ -155,6 +157,50 @@ const tools = [{
     },
   },
 }];
+
+// Extrae hallazgos directamente del texto usando char_start/char_end indicados por el LLM.
+// Quita datos_clinicos del inicio y conclusiones del final para evitar duplicados.
+function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
+  if (!estudios || estudios.length === 0) return estudios;
+
+  return estudios.map((estudio) => {
+    const start = typeof estudio.char_start === 'number' ? estudio.char_start : 0;
+    const end = typeof estudio.char_end === 'number' ? estudio.char_end : transcriptionText.length;
+
+    let fragmento = transcriptionText.substring(
+      Math.max(0, start),
+      Math.min(transcriptionText.length, end)
+    ).trim();
+
+    // Quitar conclusiones si aparecen en la segunda mitad del fragmento
+    const conclusionKeywords = ['conclusión', 'conclusion', 'conclusiones', 'impresión diagnóstica', 'impresion diagnostica'];
+    for (const kw of conclusionKeywords) {
+      const idx = fragmento.toLowerCase().lastIndexOf(kw);
+      if (idx > fragmento.length * 0.5) {
+        fragmento = fragmento.substring(0, idx).trim();
+        break;
+      }
+    }
+
+    // Quitar datos clínicos si aparecen al inicio
+    const datosKeywords = ['datos clínicos', 'datos clinicos', 'indicación', 'indicacion'];
+    for (const kw of datosKeywords) {
+      const idx = fragmento.toLowerCase().indexOf(kw);
+      if (idx !== -1 && idx < 150) {
+        const newline = fragmento.indexOf('\n', idx);
+        if (newline !== -1) {
+          fragmento = fragmento.substring(newline + 1).trim();
+        }
+        break;
+      }
+    }
+
+    return {
+      ...estudio,
+      hallazgos: fragmento || transcriptionText.substring(Math.max(0, start), Math.min(transcriptionText.length, end)).trim(),
+    };
+  });
+}
 
 module.exports.default = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -232,6 +278,11 @@ module.exports.default = async function handler(req, res) {
     }
 
     const parsed = JSON.parse(toolCall.function.arguments);
+
+    // Inyectar hallazgos directamente desde el texto transcrito (sin LLM)
+    if (parsed.estudios) {
+      parsed.estudios = extraerHallazgosDesdeTexto(transcriptionText, parsed.estudios);
+    }
 
     const plantillasDisponibles = modoManual ? [] : (templateNames || []);
     if (plantillasDisponibles.length > 0 && parsed.estudios) {
