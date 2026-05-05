@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Mic, FileText, History, Loader2, AlertCircle, ChevronRight, Trash2, RotateCcw } from 'lucide-react';
+import { Mic, FileText, History, Loader2, AlertCircle, ChevronRight, Trash2, RotateCcw, Copy } from 'lucide-react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -543,19 +543,39 @@ const Index = () => {
                       })}
                     </div>
 
-                    {/* Transcripciones acumuladas — se muestran en la misma pantalla */}
-                    {jobs.some(j => j.status === 'done') && (
-                      <div className="border border-border rounded-xl bg-card p-3 sm:p-4 space-y-2">
+                    {/* Transcripciones acumuladas con editor inteligente */}
+                    {jobs.some(j => j.status === 'done') && currentTranscripcion && (
+                      <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-foreground">Transcripciones ({jobs.filter(j => j.status === 'done').length}/{selectedFiles.length})</p>
-                          <Button size="sm" onClick={handleGoToReport} className="gap-1.5 text-xs">
-                            <FileText className="w-3.5 h-3.5" />
-                            Ir a Informes
-                          </Button>
+                          <p className="text-sm font-medium text-foreground">
+                            Transcripciones ({jobs.filter(j => j.status === 'done').length}/{selectedFiles.length})
+                          </p>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5 text-xs"
+                              onClick={() => {
+                                navigator.clipboard.writeText(textoEditado);
+                                toast.success('Copiado al portapapeles');
+                              }}
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                              Copiar todo
+                            </Button>
+                            <Button size="sm" onClick={handleGoToReport} className="gap-1.5 text-xs">
+                              <FileText className="w-3.5 h-3.5" />
+                              Ir a Informes
+                            </Button>
+                          </div>
                         </div>
-                        <div className="bg-muted/40 rounded-lg p-3 max-h-64 overflow-y-auto">
-                          <pre className="text-xs text-foreground whitespace-pre-wrap font-sans">{textoEditado}</pre>
-                        </div>
+                        <IntelligentEditor
+                          textoOriginal={currentTranscripcion.texto_original}
+                          textoEditado={textoEditado}
+                          onTextoEditadoChange={setTextoEditado}
+                          onSave={handleSaveEdit}
+                          isSaving={isSaving}
+                        />
                       </div>
                     )}
 
