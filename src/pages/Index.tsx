@@ -125,6 +125,67 @@ const Index = () => {
     return { audio, transcripcion: data.transcripcion };
   };
 
+  // Combina todas las transcripciones completadas en textoEditado
+  const combinarTranscripciones = (updatedJobs: TranscriptionJob[]) => {
+    const doneJobs = updatedJobs.filter(j => j.status === 'done' && j.transcripcion);
+    if (doneJobs.length === 0) return;
+    const lastDone = doneJobs[doneJobs.length - 1];
+    setCurrentAudio(lastDone.audio || null);
+    setCurrentTranscripcion(lastDone.transcripcion || null);
+    if (doneJobs.length === 1) {
+      setTextoEditado(lastDone.transcripcion!.texto_editado || lastDone.transcripcion!.texto_original);
+    } else {
+      const combinedText = doneJobs.map((j) =>
+        `--- ${j.file.name} ---\n\n${j.transcripcion!.texto_editado || j.transcripcion!.texto_original}`
+      ).join('\n\n');
+      setTextoEditado(combinedText);
+    }
+  };
+
+  // Transcribir UN solo archivo por índice
+  const handleTranscribeOne = async (fileIndex: number) => {
+    const file = selectedFiles[fileIndex];
+    if (!file || isTranscribing) return;
+
+    setIsTranscribing(true);
+    setError(null);
+
+    // Inicializar jobs si no existen aún
+    setJobs(prev => {
+      if (prev.length !== selectedFiles.length) {
+        return selectedFiles.map((f, i) => ({
+          file: f,
+          status: i === fileIndex ? 'uploading' as const : 'pending' as const,
+        }));
+      }
+      return prev.map((j, i) => i === fileIndex ? { ...j, status: 'uploading' as const, error: undefined } : j);
+    });
+
+    setCurrentStep('transcribing');
+
+    try {
+      const result = await transcribeOneFile(file, fileIndex);
+      setJobs(prev => {
+        const updated = prev.map((j, i) => i === fileIndex
+          ? { ...j, status: 'done' as const, audio: result.audio, transcripcion: result.transcripcion }
+          : j
+        );
+        combinarTranscripciones(updated);
+        return updated;
+      });
+      setCurrentStep('edit');
+      toast.success(`"${file.name}" transcrito`);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
+      setJobs(prev => prev.map((j, i) => i === fileIndex ? { ...j, status: 'error' as const, error: errorMsg } : j));
+      setCurrentStep('transcribing');
+      toast.error(`Error al transcribir "${file.name}"`);
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  // Transcribir TODOS los archivos
   const handleTranscribe = async () => {
     const filesToProcess = selectedFiles.length > 0 ? selectedFiles : (selectedFile ? [selectedFile] : []);
     if (filesToProcess.length === 0) return;
@@ -133,7 +194,6 @@ const Index = () => {
     setError(null);
     setCurrentStep('transcribing');
 
-    // Initialize jobs
     const initialJobs: TranscriptionJob[] = filesToProcess.map(file => ({
       file,
       status: 'pending' as const,
@@ -150,7 +210,6 @@ const Index = () => {
         lastAudio = result.audio;
         lastTranscripcion = result.transcripcion;
         completedTranscriptions.push(result.transcripcion);
-
         setJobs(prev => prev.map((j, idx) => idx === i ? { ...j, status: 'done' as const, audio: result.audio, transcripcion: result.transcripcion } : j));
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
@@ -159,26 +218,7 @@ const Index = () => {
       }
     }
 
-    // Collect successful transcriptions from jobs state for combining
-    setJobs(prev => {
-      const doneJobs = prev.filter(j => j.status === 'done' && j.transcripcion);
-      if (doneJobs.length > 0) {
-        const lastDone = doneJobs[doneJobs.length - 1];
-        setCurrentAudio(lastDone.audio || null);
-        setCurrentTranscripcion(lastDone.transcripcion || null);
-
-        if (doneJobs.length === 1) {
-          setTextoEditado(lastDone.transcripcion!.texto_editado || lastDone.transcripcion!.texto_original);
-        } else {
-          const combinedText = doneJobs.map((j, i) => {
-            const fileName = j.file.name || `Audio ${i + 1}`;
-            return `--- ${fileName} ---\n\n${j.transcripcion!.texto_editado || j.transcripcion!.texto_original}`;
-          }).join('\n\n');
-          setTextoEditado(combinedText);
-        }
-      }
-      return prev;
-    });
+    setJobs(prev => { combinarTranscripciones(prev); return prev; });
 
     if (completedTranscriptions.length > 0) {
       setCurrentAudio(lastAudio);
@@ -454,15 +494,40 @@ const Index = () => {
                 />
 
                 {selectedFiles.length > 0 && (
-                  <div className="flex justify-center">
-                    <Button size="lg" onClick={handleTranscribe} className="max-w-full gap-2 px-5 sm:px-8 text-sm sm:text-base">
-                      <Mic className="w-5 h-5 shrink-0" />
-                      <span className="truncate">
-                        {selectedFiles.length === 1
-                          ? 'Transcribir Audio'
-                          : `Transcribir ${selectedFiles.length} Audios`}
-                      </span>
-                    </Button>
+                  <div className="space-y-3">
+                    {/* Botón individual por audio */}
+                    {selectedFiles.length > 1 && (
+                      <div className="space-y-2">
+                        {selectedFiles.map((file, index) => (
+                          <div key={`${file.name}-${index}`} className="flex items-center gap-2 p-2 border border-border rounded-lg bg-card">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-muted-foreground truncate">{file.name}</p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleTranscribeOne(index)}
+                              disabled={isTranscribing}
+                              className="gap-1.5 text-xs flex-shrink-0"
+                            >
+                              <Mic className="w-3.5 h-3.5" />
+                              Transcribir
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Botón transcribir todos */}
+                    <div className="flex justify-center">
+                      <Button size="lg" onClick={handleTranscribe} disabled={isTranscribing} className="max-w-full gap-2 px-5 sm:px-8 text-sm sm:text-base">
+                        <Mic className="w-5 h-5 shrink-0" />
+                        <span className="truncate">
+                          {selectedFiles.length === 1
+                            ? 'Transcribir Audio'
+                            : `Transcribir todos (${selectedFiles.length})`}
+                        </span>
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>
