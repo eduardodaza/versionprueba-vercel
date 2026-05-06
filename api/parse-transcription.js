@@ -179,8 +179,8 @@ function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
     for (const palabra of palabrasNombre) {
       const idx = texto.toLowerCase().indexOf(palabra.toLowerCase());
       if (idx !== -1) {
-        // Retroceder hasta el inicio de la oración/párrafo
-        posInicio = Math.max(0, idx - 50);
+        // Empezar exactamente donde aparece el nombre, sin retroceder
+        posInicio = idx;
         break;
       }
     }
@@ -195,7 +195,7 @@ function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
       for (const palabra of palabrasSig) {
         const idx = texto.toLowerCase().indexOf(palabra.toLowerCase(), posInicio + 50);
         if (idx !== -1) {
-          posFin = Math.max(posInicio + 50, idx - 50);
+          posFin = idx;
           break;
         }
       }
