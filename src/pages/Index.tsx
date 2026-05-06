@@ -546,11 +546,19 @@ const Index = () => {
                     {/* Transcripciones acumuladas con editor inteligente */}
                     {jobs.some(j => j.status === 'done') && currentTranscripcion && (
                       <div className="space-y-2">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
                           <p className="text-sm font-medium text-foreground">
                             Transcripciones ({jobs.filter(j => j.status === 'done').length}/{selectedFiles.length})
                           </p>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5 text-xs"
+                              onClick={handleClear}
+                            >
+                              ← Nuevo
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"
