@@ -158,21 +158,57 @@ const tools = [{
   },
 }];
 
-// Extrae hallazgos directamente del texto usando char_start/char_end indicados por el LLM.
-// Quita datos_clinicos del inicio y conclusiones del final para evitar duplicados.
+// Extrae hallazgos directamente del texto buscando el nombre del paciente para delimitar
+// cada estudio con precisión, sin depender de posiciones aproximadas del LLM.
 function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
   if (!estudios || estudios.length === 0) return estudios;
 
-  return estudios.map((estudio) => {
-    const start = typeof estudio.char_start === 'number' ? estudio.char_start : 0;
-    const end = typeof estudio.char_end === 'number' ? estudio.char_end : transcriptionText.length;
+  const texto = transcriptionText;
 
-    let fragmento = transcriptionText.substring(
-      Math.max(0, start),
-      Math.min(transcriptionText.length, end)
-    ).trim();
+  // Para cada estudio, encontrar su fragmento buscando el nombre del paciente
+  const fragmentos = estudios.map((estudio, i) => {
+    const nombre = (estudio.nombre_paciente || '').trim();
+    if (!nombre) return null;
 
-    // Quitar conclusiones si aparecen en la segunda mitad del fragmento
+    // Buscar la primera palabra significativa del nombre (apellido o nombre, >3 chars)
+    const palabrasNombre = nombre.split(/\s+/).filter(p => p.length > 3);
+    if (palabrasNombre.length === 0) return null;
+
+    // Buscar posición del nombre en el texto (insensible a mayúsculas)
+    let posInicio = -1;
+    for (const palabra of palabrasNombre) {
+      const idx = texto.toLowerCase().indexOf(palabra.toLowerCase());
+      if (idx !== -1) {
+        // Retroceder hasta el inicio de la oración/párrafo
+        posInicio = Math.max(0, idx - 50);
+        break;
+      }
+    }
+
+    if (posInicio === -1) return null;
+
+    // El fin es donde empieza el siguiente estudio (o el fin del texto)
+    let posFin = texto.length;
+    for (let j = i + 1; j < estudios.length; j++) {
+      const nombreSig = (estudios[j].nombre_paciente || '').trim();
+      const palabrasSig = nombreSig.split(/\s+/).filter(p => p.length > 3);
+      for (const palabra of palabrasSig) {
+        const idx = texto.toLowerCase().indexOf(palabra.toLowerCase(), posInicio + 50);
+        if (idx !== -1) {
+          posFin = Math.max(posInicio + 50, idx - 50);
+          break;
+        }
+      }
+      if (posFin < texto.length) break;
+    }
+
+    return texto.substring(posInicio, posFin).trim();
+  });
+
+  return estudios.map((estudio, i) => {
+    let fragmento = fragmentos[i] || texto;
+
+    // Quitar conclusiones si aparecen en la segunda mitad
     const conclusionKeywords = ['conclusión', 'conclusion', 'conclusiones', 'impresión diagnóstica', 'impresion diagnostica'];
     for (const kw of conclusionKeywords) {
       const idx = fragmento.toLowerCase().lastIndexOf(kw);
@@ -188,17 +224,12 @@ function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
       const idx = fragmento.toLowerCase().indexOf(kw);
       if (idx !== -1 && idx < 150) {
         const newline = fragmento.indexOf('\n', idx);
-        if (newline !== -1) {
-          fragmento = fragmento.substring(newline + 1).trim();
-        }
+        if (newline !== -1) fragmento = fragmento.substring(newline + 1).trim();
         break;
       }
     }
 
-    return {
-      ...estudio,
-      hallazgos: fragmento || transcriptionText.substring(Math.max(0, start), Math.min(transcriptionText.length, end)).trim(),
-    };
+    return { ...estudio, hallazgos: fragmento || texto };
   });
 }
 
