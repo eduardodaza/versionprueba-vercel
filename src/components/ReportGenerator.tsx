@@ -95,7 +95,7 @@ function TemplatePicker({
               autoFocus
             />
           </div>
-          <ScrollArea className="h-[200px]">
+          <div className="h-[200px] overflow-y-auto pr-1">
             <div className="space-y-0.5">
               {filtered.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-2">Sin resultados</p>
@@ -110,7 +110,7 @@ function TemplatePicker({
                 </button>
               ))}
             </div>
-          </ScrollArea>
+          </div>
         </PopoverContent>
       </Popover>
       <Button
@@ -217,7 +217,7 @@ function ManualStudyRow({
                 autoFocus
               />
             </div>
-            <ScrollArea className="h-[200px]">
+            <div className="h-[200px] overflow-y-auto pr-1">
               <div className="space-y-0.5">
                 {filtered.length === 0 && (
                   <p className="text-xs text-muted-foreground text-center py-2">Sin resultados</p>
@@ -232,7 +232,7 @@ function ManualStudyRow({
                   </button>
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           </PopoverContent>
         </Popover>
 
