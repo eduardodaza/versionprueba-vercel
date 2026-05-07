@@ -158,48 +158,65 @@ const tools = [{
   },
 }];
 
-// Extrae hallazgos directamente del texto buscando el nombre del paciente para delimitar
-// cada estudio con precisión, sin depender de posiciones aproximadas del LLM.
+// Extrae hallazgos directamente del texto buscando el nombre completo del paciente
+// como frase exacta para evitar coincidencias parciales dentro de otras palabras.
 function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
   if (!estudios || estudios.length === 0) return estudios;
 
   const texto = transcriptionText;
+  const textoLower = texto.toLowerCase();
 
-  // Para cada estudio, encontrar su fragmento buscando el nombre del paciente
+  // Busca la posición de un nombre completo en el texto, como frase (no palabra suelta)
+  function buscarNombre(nombre, desdePos) {
+    if (!nombre) return -1;
+    const nombreLower = nombre.toLowerCase().trim();
+    // Intentar primero nombre completo
+    const idxCompleto = textoLower.indexOf(nombreLower, desdePos);
+    if (idxCompleto !== -1) return idxCompleto;
+    // Si no, buscar apellido1 + apellido2 juntos (las dos últimas palabras)
+    const partes = nombreLower.split(/\s+/).filter(p => p.length > 3);
+    if (partes.length >= 2) {
+      const ultimas = partes.slice(-2).join(' ');
+      const idx = textoLower.indexOf(ultimas, desdePos);
+      if (idx !== -1) return idx;
+    }
+    // Último recurso: apellido más largo (>5 chars)
+    const larga = partes.filter(p => p.length > 5).sort((a,b) => b.length - a.length)[0];
+    if (larga) {
+      // Buscar como palabra completa (con límites de palabra)
+      let pos = desdePos;
+      while (pos < textoLower.length) {
+        const idx = textoLower.indexOf(larga, pos);
+        if (idx === -1) break;
+        // Verificar que es una palabra completa (no parte de otra)
+        const antes = idx === 0 ? ' ' : textoLower[idx - 1];
+        const despues = idx + larga.length >= textoLower.length ? ' ' : textoLower[idx + larga.length];
+        if (!/[a-záéíóúüñ]/.test(antes) && !/[a-záéíóúüñ]/.test(despues)) {
+          return idx;
+        }
+        pos = idx + 1;
+      }
+    }
+    return -1;
+  }
+
+  // Para cada estudio, encontrar su fragmento
   const fragmentos = estudios.map((estudio, i) => {
     const nombre = (estudio.nombre_paciente || '').trim();
     if (!nombre) return null;
 
-    // Buscar la primera palabra significativa del nombre (apellido o nombre, >3 chars)
-    const palabrasNombre = nombre.split(/\s+/).filter(p => p.length > 3);
-    if (palabrasNombre.length === 0) return null;
-
-    // Buscar posición del nombre en el texto (insensible a mayúsculas)
-    let posInicio = -1;
-    for (const palabra of palabrasNombre) {
-      const idx = texto.toLowerCase().indexOf(palabra.toLowerCase());
-      if (idx !== -1) {
-        // Empezar exactamente donde aparece el nombre, sin retroceder
-        posInicio = idx;
-        break;
-      }
-    }
-
+    const posInicio = buscarNombre(nombre, 0);
     if (posInicio === -1) return null;
 
-    // El fin es donde empieza el siguiente estudio (o el fin del texto)
+    // El fin es donde empieza el siguiente estudio
     let posFin = texto.length;
     for (let j = i + 1; j < estudios.length; j++) {
       const nombreSig = (estudios[j].nombre_paciente || '').trim();
-      const palabrasSig = nombreSig.split(/\s+/).filter(p => p.length > 3);
-      for (const palabra of palabrasSig) {
-        const idx = texto.toLowerCase().indexOf(palabra.toLowerCase(), posInicio + 50);
-        if (idx !== -1) {
-          posFin = idx;
-          break;
-        }
+      const idxSig = buscarNombre(nombreSig, posInicio + 20);
+      if (idxSig !== -1 && idxSig > posInicio) {
+        posFin = idxSig;
+        break;
       }
-      if (posFin < texto.length) break;
     }
 
     return texto.substring(posInicio, posFin).trim();
