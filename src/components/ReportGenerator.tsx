@@ -95,7 +95,7 @@ function TemplatePicker({
               autoFocus
             />
           </div>
-          <ScrollArea className="max-h-[200px]">
+          <ScrollArea className="h-[200px]">
             <div className="space-y-0.5">
               {filtered.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-2">Sin resultados</p>
@@ -217,7 +217,7 @@ function ManualStudyRow({
                 autoFocus
               />
             </div>
-            <ScrollArea className="max-h-[200px]">
+            <ScrollArea className="h-[200px]">
               <div className="space-y-0.5">
                 {filtered.length === 0 && (
                   <p className="text-xs text-muted-foreground text-center py-2">Sin resultados</p>
