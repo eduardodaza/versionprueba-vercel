@@ -158,69 +158,73 @@ const tools = [{
   },
 }];
 
-// Extrae hallazgos directamente del texto buscando el nombre completo del paciente
-// como frase exacta para evitar coincidencias parciales dentro de otras palabras.
+// Extrae hallazgos directamente del texto.
+// Estrategia 1: dividir por separadores --- AUDIO --- si existen (más confiable).
+// Estrategia 2: usar char_start/char_end del LLM como fallback.
 function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
   if (!estudios || estudios.length === 0) return estudios;
 
   const texto = transcriptionText;
-  const textoLower = texto.toLowerCase();
 
-  // Busca la posición de un nombre completo en el texto, como frase (no palabra suelta)
-  function buscarNombre(nombre, desdePos) {
-    if (!nombre) return -1;
-    const nombreLower = nombre.toLowerCase().trim();
-    // Intentar primero nombre completo
-    const idxCompleto = textoLower.indexOf(nombreLower, desdePos);
-    if (idxCompleto !== -1) return idxCompleto;
-    // Si no, buscar apellido1 + apellido2 juntos (las dos últimas palabras)
-    const partes = nombreLower.split(/\s+/).filter(p => p.length > 3);
-    if (partes.length >= 2) {
-      const ultimas = partes.slice(-2).join(' ');
-      const idx = textoLower.indexOf(ultimas, desdePos);
-      if (idx !== -1) return idx;
-    }
-    // Último recurso: apellido más largo (>5 chars)
-    const larga = partes.filter(p => p.length > 5).sort((a,b) => b.length - a.length)[0];
-    if (larga) {
-      // Buscar como palabra completa (con límites de palabra)
-      let pos = desdePos;
-      while (pos < textoLower.length) {
-        const idx = textoLower.indexOf(larga, pos);
-        if (idx === -1) break;
-        // Verificar que es una palabra completa (no parte de otra)
-        const antes = idx === 0 ? ' ' : textoLower[idx - 1];
-        const despues = idx + larga.length >= textoLower.length ? ' ' : textoLower[idx + larga.length];
-        if (!/[a-záéíóúüñ]/.test(antes) && !/[a-záéíóúüñ]/.test(despues)) {
-          return idx;
-        }
-        pos = idx + 1;
-      }
-    }
-    return -1;
+  // Detectar separadores --- AUDIO-xxx --- o --- cualquier texto ---
+  const separadorRegex = /---[^\n]+-{2,}/g;
+  const separadores = [];
+  let match;
+  while ((match = separadorRegex.exec(texto)) !== null) {
+    separadores.push({ pos: match.index, fin: match.index + match[0].length });
   }
 
-  // Para cada estudio, encontrar su fragmento
-  const fragmentos = estudios.map((estudio, i) => {
-    const nombre = (estudio.nombre_paciente || '').trim();
-    if (!nombre) return null;
+  let fragmentos;
 
-    const posInicio = buscarNombre(nombre, 0);
-    if (posInicio === -1) return null;
+  if (separadores.length > 0) {
+    // Estrategia 1: partir el texto por los separadores --- AUDIO ---
+    const bloques = [];
+    for (let i = 0; i < separadores.length; i++) {
+      const inicioBloque = separadores[i].fin;
+      const finBloque = i + 1 < separadores.length ? separadores[i + 1].pos : texto.length;
+      bloques.push(texto.substring(inicioBloque, finBloque).trim());
+    }
+    const antePrimero = texto.substring(0, separadores[0].pos).trim();
+    if (antePrimero.length > 50) bloques.unshift(antePrimero);
+    fragmentos = estudios.map((_, i) => bloques[i] || null);
 
-    // El fin es donde empieza el siguiente estudio
-    let posFin = texto.length;
-    for (let j = i + 1; j < estudios.length; j++) {
-      const nombreSig = (estudios[j].nombre_paciente || '').trim();
-      const idxSig = buscarNombre(nombreSig, posInicio + 20);
-      if (idxSig !== -1 && idxSig > posInicio) {
-        posFin = idxSig;
-        break;
+  } else {
+    // Estrategia 2: dividir por párrafos dobles que empiecen con indicador de paciente
+    // Cubre texto pegado desde otro editor sin separadores --- AUDIO ---
+    const parrafos = texto.split(/\n{2,}/);
+    const bloques = [];
+    let bloqueActual = '';
+
+    const esInicioEstudio = (p) => {
+      const t = p.trim().toLowerCase();
+      return t.startsWith('siguiente paciente') ||
+             t.startsWith('paciente ') ||
+             t.startsWith('el paciente') ||
+             t.startsWith('la paciente') ||
+             /^[a-záéíóúüñ]+\s+[a-záéíóúüñ]+\s+[a-záéíóúüñ]/.test(t); // nombre propio (3 palabras)
+    };
+
+    for (const parrafo of parrafos) {
+      if (esInicioEstudio(parrafo) && bloqueActual.length > 100) {
+        bloques.push(bloqueActual.trim());
+        bloqueActual = parrafo;
+      } else {
+        bloqueActual += (bloqueActual ? '\n\n' : '') + parrafo;
       }
     }
+    if (bloqueActual.trim()) bloques.push(bloqueActual.trim());
 
-    return texto.substring(posInicio, posFin).trim();
-  });
+    if (bloques.length >= estudios.length) {
+      fragmentos = estudios.map((_, i) => bloques[i] || null);
+    } else {
+      // Fallback: usar char_start/char_end del LLM
+      fragmentos = estudios.map((estudio) => {
+        const start = typeof estudio.char_start === 'number' ? estudio.char_start : 0;
+        const end = typeof estudio.char_end === 'number' ? estudio.char_end : texto.length;
+        return texto.substring(Math.max(0, start), Math.min(texto.length, end)).trim();
+      });
+    }
+  }
 
   return estudios.map((estudio, i) => {
     let fragmento = fragmentos[i] || texto;
