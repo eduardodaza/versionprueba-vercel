@@ -160,43 +160,24 @@ const tools = [{
   },
 }];
 
-// Extrae hallazgos directamente del texto.
-// Prioridad 1: separadores --- AUDIO --- (más confiable, siempre presentes al transcribir en la app).
-// Prioridad 2: char_start/char_end del LLM como fallback.
+// Extrae hallazgos directamente del texto usando char_start/char_end del LLM.
+// Los char_start/char_end son absolutos sobre el texto completo y se usan siempre.
+// Esto funciona tanto con separadores como sin ellos, y cuando un audio tiene múltiples estudios.
 function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
   if (!estudios || estudios.length === 0) return estudios;
 
-  // Detectar separadores --- AUDIO-xxx ---
-  const separadorRegex = /---[^\n]+-{2,}/g;
-  const separadores = [];
-  let match;
-  while ((match = separadorRegex.exec(transcriptionText)) !== null) {
-    separadores.push({ pos: match.index, fin: match.index + match[0].length });
-  }
-
-  let bloques = null;
-  if (separadores.length > 0) {
-    bloques = [];
-    for (let i = 0; i < separadores.length; i++) {
-      const inicioBloque = separadores[i].fin;
-      const finBloque = i + 1 < separadores.length ? separadores[i + 1].pos : transcriptionText.length;
-      const bloque = transcriptionText.substring(inicioBloque, finBloque).trim();
-      if (bloque.length > 20) bloques.push(bloque);
-    }
-  }
-
   return estudios.map((estudio, i) => {
-    let fragmento;
+    const start = typeof estudio.char_start === 'number' ? estudio.char_start : 0;
+    const end = typeof estudio.char_end === 'number' ? estudio.char_end : transcriptionText.length;
 
-    if (bloques && bloques[i]) {
-      fragmento = bloques[i];
-    } else {
-      const start = typeof estudio.char_start === 'number' ? estudio.char_start : 0;
-      const end = typeof estudio.char_end === 'number' ? estudio.char_end : transcriptionText.length;
-      fragmento = transcriptionText.substring(
-        Math.max(0, start),
-        Math.min(transcriptionText.length, end)
-      ).trim();
+    let fragmento = transcriptionText.substring(
+      Math.max(0, start),
+      Math.min(transcriptionText.length, end)
+    ).trim();
+
+    // Si el fragmento está vacío o es muy corto, usar el texto completo como fallback
+    if (fragmento.length < 20) {
+      fragmento = transcriptionText;
     }
 
     // Quitar conclusiones si aparecen en la segunda mitad
@@ -220,7 +201,7 @@ function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
       }
     }
 
-    return { ...estudio, hallazgos: fragmento || transcriptionText };
+    return { ...estudio, hallazgos: fragmento };
   });
 }
 
