@@ -415,7 +415,7 @@ export function ReportGenerator({
         conclusiones: item.study.conclusiones,
         datos_clinicos: item.study.datos_clinicos,
       });
-      const fileName = `${item.study.nombre_archivo_sugerido || item.study.nombre_paciente} - ${plantilla.nombre}.docx`;
+      const fileName = `${item.study.nombre_archivo_sugerido || item.study.nombre_paciente} - ${plantilla.nombre} - ${index + 1}.docx`;
       setEstudiosManual(prev => prev.map((it, i) => i === index ? { ...it, status: 'done' as const, blob: modifiedBlob, fileName } : it));
       toast.success(`Informe generado: ${item.study.nombre_paciente}`);
     } catch (err) {
@@ -464,7 +464,7 @@ export function ReportGenerator({
         conclusiones: report.study.conclusiones,
         datos_clinicos: report.study.datos_clinicos,
       });
-      const fileName = `${report.study.nombre_paciente} ${selectedPlantilla.nombre}.docx`;
+      const fileName = `${report.study.nombre_paciente} ${selectedPlantilla.nombre} ${index + 1}.docx`;
       setReports(prev => prev.map((r, idx) => idx === index ? { ...r, status: 'done' as const, blob: modifiedBlob, fileName, isRetrying: false, manualPlantillaId: undefined } : r));
       toast.success(`Informe generado: ${report.study.nombre_paciente}`);
     } catch (err) {
