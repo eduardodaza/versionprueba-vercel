@@ -273,18 +273,55 @@ export function ReportGenerator({
   // ── Parsear transcripción ─────────────────────────────────────────────────
   const parsearTranscripcion = async (modoManual: boolean = false): Promise<ParsedStudy[]> => {
     const templateNames = modoManual ? [] : plantillas.map(p => p.nombre);
-    const response = await fetch('/api/parse-transcription', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcriptionText: textoFinal, templateNames, modoManual }),
-    });
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error || 'Error al analizar la transcripción');
+
+    // Dividir por separadores --- AUDIO --- para procesar cada bloque por separado
+    // Esto evita que el LLM mezcle estudios de diferentes audios
+    const sepRegex = /---[^
+]+-{2,}/g;
+    const partes: string[] = [];
+    let lastIndex = 0;
+    let m: RegExpExecArray | null;
+    const indices: number[] = [];
+
+    while ((m = sepRegex.exec(textoFinal)) !== null) {
+      indices.push(m.index);
     }
-    const parsed = await response.json();
-    setUnmatchedStudies(parsed.estudios_sin_match || []);
-    return parsed.estudios || [];
+
+    if (indices.length > 1) {
+      // Hay múltiples separadores — procesar bloque por bloque
+      for (let i = 0; i < indices.length; i++) {
+        const sepEnd = textoFinal.indexOf('
+', indices[i]);
+        const start = sepEnd !== -1 ? sepEnd + 1 : indices[i];
+        const end = i + 1 < indices.length ? indices[i + 1] : textoFinal.length;
+        const bloque = textoFinal.substring(start, end).trim();
+        if (bloque.length > 30) partes.push(bloque);
+      }
+    } else {
+      // Sin separadores o solo uno — enviar todo junto
+      partes.push(textoFinal);
+    }
+
+    const todosEstudios: ParsedStudy[] = [];
+    const todosSinMatch: string[] = [];
+
+    for (const parte of partes) {
+      const response = await fetch('/api/parse-transcription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcriptionText: parte, templateNames, modoManual }),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Error al analizar la transcripción');
+      }
+      const parsed = await response.json();
+      todosEstudios.push(...(parsed.estudios || []));
+      todosSinMatch.push(...(parsed.estudios_sin_match || []));
+    }
+
+    setUnmatchedStudies(todosSinMatch);
+    return todosEstudios;
   };
 
   // ── Generar documentos (modo auto) ────────────────────────────────────────
@@ -415,7 +452,7 @@ export function ReportGenerator({
         conclusiones: item.study.conclusiones,
         datos_clinicos: item.study.datos_clinicos,
       });
-      const fileName = `${item.study.nombre_archivo_sugerido || item.study.nombre_paciente} - ${plantilla.nombre} - ${index + 1}.docx`;
+      const fileName = `${item.study.nombre_archivo_sugerido || item.study.nombre_paciente} - ${plantilla.nombre}.docx`;
       setEstudiosManual(prev => prev.map((it, i) => i === index ? { ...it, status: 'done' as const, blob: modifiedBlob, fileName } : it));
       toast.success(`Informe generado: ${item.study.nombre_paciente}`);
     } catch (err) {
@@ -464,7 +501,7 @@ export function ReportGenerator({
         conclusiones: report.study.conclusiones,
         datos_clinicos: report.study.datos_clinicos,
       });
-      const fileName = `${report.study.nombre_paciente} ${selectedPlantilla.nombre} ${index + 1}.docx`;
+      const fileName = `${report.study.nombre_paciente} ${selectedPlantilla.nombre}.docx`;
       setReports(prev => prev.map((r, idx) => idx === index ? { ...r, status: 'done' as const, blob: modifiedBlob, fileName, isRetrying: false, manualPlantillaId: undefined } : r));
       toast.success(`Informe generado: ${report.study.nombre_paciente}`);
     } catch (err) {
