@@ -12,12 +12,13 @@ Campos por estudio:
 - conclusiones: conclusiones/impresión diagnóstica, o ""
 - hallazgos: ""
 - plantilla_match: null
-- nombre_archivo_sugerido: nombre_paciente + tipo_estudio + region
-- char_start: posición en caracteres donde empieza este estudio en el texto
-- char_end: posición en caracteres donde termina este estudio en el texto
+- nombre_archivo_sugerido: nombre_paciente + tipo_estudio + region + lateralidad
+- char_start: posición exacta en caracteres donde empieza el dictado de este estudio
+- char_end: posición exacta en caracteres donde termina el dictado de este estudio
 
 REGLAS:
 - Extraer TODOS los estudios sin excepción
+- char_start y char_end deben delimitar EXACTAMENTE el fragmento de este estudio sin solapar con otros
 - Campos vacíos = "" nunca null`;
 
 const systemPromptAuto = `Parser de transcripciones radiológicas. Extrae TODOS los estudios via tool call.
@@ -28,13 +29,14 @@ Campos por estudio:
 - conclusiones: conclusiones/impresión diagnóstica, o ""
 - hallazgos: ""
 - plantilla_match: nombre exacto de la lista de plantillas disponibles, o null
-- nombre_archivo_sugerido: nombre_paciente + tipo_estudio + region
-- char_start: posición en caracteres donde empieza este estudio en el texto
-- char_end: posición en caracteres donde termina este estudio en el texto
+- nombre_archivo_sugerido: nombre_paciente + tipo_estudio + region + lateralidad
+- char_start: posición exacta en caracteres donde empieza el dictado de este estudio
+- char_end: posición exacta en caracteres donde termina el dictado de este estudio
 
 REGLAS:
 - Extraer TODOS los estudios sin excepción
 - TAC → solo plantillas con "TAC". RM → solo plantillas con "RM" o "++RM". Nunca mezclar.
+- char_start y char_end deben delimitar EXACTAMENTE el fragmento de este estudio sin solapar con otros
 - Campos vacíos = "" nunca null`;
 
 function encontrarPlantillaMasCercana(tipoEstudio, region, esContrastado, conclusiones, hallazgos, templateNames) {
@@ -159,75 +161,43 @@ const tools = [{
 }];
 
 // Extrae hallazgos directamente del texto.
-// Estrategia 1: dividir por separadores --- AUDIO --- si existen (más confiable).
-// Estrategia 2: usar char_start/char_end del LLM como fallback.
+// Prioridad 1: separadores --- AUDIO --- (más confiable, siempre presentes al transcribir en la app).
+// Prioridad 2: char_start/char_end del LLM como fallback.
 function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
   if (!estudios || estudios.length === 0) return estudios;
 
-  const texto = transcriptionText;
-
-  // Detectar separadores --- AUDIO-xxx --- o --- cualquier texto ---
+  // Detectar separadores --- AUDIO-xxx ---
   const separadorRegex = /---[^\n]+-{2,}/g;
   const separadores = [];
   let match;
-  while ((match = separadorRegex.exec(texto)) !== null) {
+  while ((match = separadorRegex.exec(transcriptionText)) !== null) {
     separadores.push({ pos: match.index, fin: match.index + match[0].length });
   }
 
-  let fragmentos;
-
+  let bloques = null;
   if (separadores.length > 0) {
-    // Estrategia 1: partir el texto por los separadores --- AUDIO ---
-    const bloques = [];
+    bloques = [];
     for (let i = 0; i < separadores.length; i++) {
       const inicioBloque = separadores[i].fin;
-      const finBloque = i + 1 < separadores.length ? separadores[i + 1].pos : texto.length;
-      bloques.push(texto.substring(inicioBloque, finBloque).trim());
-    }
-    const antePrimero = texto.substring(0, separadores[0].pos).trim();
-    if (antePrimero.length > 50) bloques.unshift(antePrimero);
-    fragmentos = estudios.map((_, i) => bloques[i] || null);
-
-  } else {
-    // Estrategia 2: dividir por párrafos dobles que empiecen con indicador de paciente
-    // Cubre texto pegado desde otro editor sin separadores --- AUDIO ---
-    const parrafos = texto.split(/\n{2,}/);
-    const bloques = [];
-    let bloqueActual = '';
-
-    const esInicioEstudio = (p) => {
-      const t = p.trim().toLowerCase();
-      return t.startsWith('siguiente paciente') ||
-             t.startsWith('paciente ') ||
-             t.startsWith('el paciente') ||
-             t.startsWith('la paciente') ||
-             /^[a-záéíóúüñ]+\s+[a-záéíóúüñ]+\s+[a-záéíóúüñ]/.test(t); // nombre propio (3 palabras)
-    };
-
-    for (const parrafo of parrafos) {
-      if (esInicioEstudio(parrafo) && bloqueActual.length > 100) {
-        bloques.push(bloqueActual.trim());
-        bloqueActual = parrafo;
-      } else {
-        bloqueActual += (bloqueActual ? '\n\n' : '') + parrafo;
-      }
-    }
-    if (bloqueActual.trim()) bloques.push(bloqueActual.trim());
-
-    if (bloques.length >= estudios.length) {
-      fragmentos = estudios.map((_, i) => bloques[i] || null);
-    } else {
-      // Fallback: usar char_start/char_end del LLM
-      fragmentos = estudios.map((estudio) => {
-        const start = typeof estudio.char_start === 'number' ? estudio.char_start : 0;
-        const end = typeof estudio.char_end === 'number' ? estudio.char_end : texto.length;
-        return texto.substring(Math.max(0, start), Math.min(texto.length, end)).trim();
-      });
+      const finBloque = i + 1 < separadores.length ? separadores[i + 1].pos : transcriptionText.length;
+      const bloque = transcriptionText.substring(inicioBloque, finBloque).trim();
+      if (bloque.length > 20) bloques.push(bloque);
     }
   }
 
   return estudios.map((estudio, i) => {
-    let fragmento = fragmentos[i] || texto;
+    let fragmento;
+
+    if (bloques && bloques[i]) {
+      fragmento = bloques[i];
+    } else {
+      const start = typeof estudio.char_start === 'number' ? estudio.char_start : 0;
+      const end = typeof estudio.char_end === 'number' ? estudio.char_end : transcriptionText.length;
+      fragmento = transcriptionText.substring(
+        Math.max(0, start),
+        Math.min(transcriptionText.length, end)
+      ).trim();
+    }
 
     // Quitar conclusiones si aparecen en la segunda mitad
     const conclusionKeywords = ['conclusión', 'conclusion', 'conclusiones', 'impresión diagnóstica', 'impresion diagnostica'];
@@ -250,7 +220,7 @@ function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
       }
     }
 
-    return { ...estudio, hallazgos: fragmento || texto };
+    return { ...estudio, hallazgos: fragmento || transcriptionText };
   });
 }
 
@@ -331,7 +301,6 @@ module.exports.default = async function handler(req, res) {
 
     const parsed = JSON.parse(toolCall.function.arguments);
 
-    // Inyectar hallazgos directamente desde el texto transcrito (sin LLM)
     if (parsed.estudios) {
       parsed.estudios = extraerHallazgosDesdeTexto(transcriptionText, parsed.estudios);
     }
