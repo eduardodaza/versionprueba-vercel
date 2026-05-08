@@ -160,37 +160,77 @@ const tools = [{
   },
 }];
 
-// Extrae hallazgos directamente del texto usando char_start/char_end del LLM.
-// Los char_start/char_end son absolutos sobre el texto completo y se usan siempre.
-// Esto funciona tanto con separadores como sin ellos, y cuando un audio tiene múltiples estudios.
+// Divide el texto en segmentos por estudio usando las conclusiones como delimitadores.
+// Funciona cuando un audio contiene múltiples estudios dictados seguidos.
+function dividirPorEstudios(texto, numEstudios) {
+  if (numEstudios <= 1) return [texto];
+
+  // Buscar todas las posiciones de conclusiones/impresión diagnóstica
+  const conclusionRegex = /\*{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[:\s*]*/gi;
+  const posiciones = [];
+  let m;
+  while ((m = conclusionRegex.exec(texto)) !== null) {
+    posiciones.push(m.index);
+  }
+
+  if (posiciones.length === 0) return [texto];
+
+  // Si hay exactamente N-1 conclusiones para N estudios, usar como delimitadores
+  // La conclusión marca el FIN de ese estudio
+  const bloques = [];
+  let inicio = 0;
+
+  for (let i = 0; i < posiciones.length && bloques.length < numEstudios - 1; i++) {
+    // Buscar el fin de la conclusión (hasta doble salto de línea o siguiente paciente)
+    let finConclusion = texto.length;
+    const despuesConclusion = texto.indexOf('\n', posiciones[i] + 50);
+    if (despuesConclusion !== -1) {
+      // Buscar doble salto o "siguiente paciente" o "paciente"
+      const dobleSalto = texto.indexOf('\n\n', despuesConclusion);
+      const siguientePaciente = texto.toLowerCase().indexOf('siguiente paciente', despuesConclusion);
+      const soloPaciente = texto.toLowerCase().indexOf('\npaciente ', despuesConclusion);
+      
+      const candidatos = [dobleSalto, siguientePaciente, soloPaciente].filter(p => p > posiciones[i]);
+      if (candidatos.length > 0) {
+        finConclusion = Math.min(...candidatos) + 1;
+      }
+    }
+    
+    bloques.push(texto.substring(inicio, finConclusion).trim());
+    inicio = finConclusion;
+  }
+  
+  // El último bloque es el resto del texto
+  if (inicio < texto.length) {
+    bloques.push(texto.substring(inicio).trim());
+  }
+
+  // Si no pudimos dividir correctamente, devolver el texto completo para cada estudio
+  if (bloques.length < numEstudios) {
+    return Array(numEstudios).fill(texto);
+  }
+
+  return bloques;
+}
+
+// Extrae hallazgos directamente del texto dividiéndolo por conclusiones.
 function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
   if (!estudios || estudios.length === 0) return estudios;
 
+  // Dividir el texto en bloques según número de estudios
+  const bloques = dividirPorEstudios(transcriptionText, estudios.length);
+
   return estudios.map((estudio, i) => {
-    const start = typeof estudio.char_start === 'number' ? estudio.char_start : 0;
-    const end = typeof estudio.char_end === 'number' ? estudio.char_end : transcriptionText.length;
+    let fragmento = bloques[i] || transcriptionText;
 
-    let fragmento = transcriptionText.substring(
-      Math.max(0, start),
-      Math.min(transcriptionText.length, end)
-    ).trim();
-
-    // Si el fragmento está vacío o es muy corto, usar el texto completo como fallback
-    if (fragmento.length < 20) {
-      fragmento = transcriptionText;
+    // Quitar conclusiones del final
+    const conclusionRegex = /\*{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[:\s*]*/gi;
+    const match = [...fragmento.matchAll(conclusionRegex)].pop();
+    if (match && match.index > fragmento.length * 0.4) {
+      fragmento = fragmento.substring(0, match.index).trim();
     }
 
-    // Quitar conclusiones si aparecen en la segunda mitad
-    const conclusionKeywords = ['conclusión', 'conclusion', 'conclusiones', 'impresión diagnóstica', 'impresion diagnostica'];
-    for (const kw of conclusionKeywords) {
-      const idx = fragmento.toLowerCase().lastIndexOf(kw);
-      if (idx > fragmento.length * 0.5) {
-        fragmento = fragmento.substring(0, idx).trim();
-        break;
-      }
-    }
-
-    // Quitar datos clínicos si aparecen al inicio
+    // Quitar datos clínicos del inicio
     const datosKeywords = ['datos clínicos', 'datos clinicos', 'indicación', 'indicacion'];
     for (const kw of datosKeywords) {
       const idx = fragmento.toLowerCase().indexOf(kw);
@@ -201,7 +241,10 @@ function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
       }
     }
 
-    return { ...estudio, hallazgos: fragmento };
+    // Limpiar separadores --- AUDIO --- si quedaron al inicio
+    fragmento = fragmento.replace(/^---[^\n]+---\s*/m, '').trim();
+
+    return { ...estudio, hallazgos: fragmento || transcriptionText };
   });
 }
 
