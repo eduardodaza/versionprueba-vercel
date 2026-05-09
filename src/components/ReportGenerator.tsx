@@ -335,8 +335,7 @@ export function ReportGenerator({
         let inicio = 0;
         for (let pi = 0; pi < posiciones.length && bloques.length < estudiosDeEstaParte.length - 1; pi++) {
           // Fin del bloque: después de la conclusión, hasta doble salto o "siguiente"
-          const despues = parte.indexOf('
-', posiciones[pi] + 30);
+          const despues = parte.indexOf(String.fromCharCode(10), posiciones[pi] + 30);
           let fin = parte.length;
           if (despues !== -1) {
             const ds = parte.indexOf('
