@@ -13,12 +13,9 @@ Campos por estudio:
 - hallazgos: ""
 - plantilla_match: null
 - nombre_archivo_sugerido: nombre_paciente + tipo_estudio + region + lateralidad
-- char_start: posición exacta en caracteres donde empieza el dictado de este estudio
-- char_end: posición exacta en caracteres donde termina el dictado de este estudio
 
 REGLAS:
 - Extraer TODOS los estudios sin excepción
-- char_start y char_end deben delimitar EXACTAMENTE el fragmento de este estudio sin solapar con otros
 - Campos vacíos = "" nunca null`;
 
 const systemPromptAuto = `Parser de transcripciones radiológicas. Extrae TODOS los estudios via tool call.
@@ -30,13 +27,10 @@ Campos por estudio:
 - hallazgos: ""
 - plantilla_match: nombre exacto de la lista de plantillas disponibles, o null
 - nombre_archivo_sugerido: nombre_paciente + tipo_estudio + region + lateralidad
-- char_start: posición exacta en caracteres donde empieza el dictado de este estudio
-- char_end: posición exacta en caracteres donde termina el dictado de este estudio
 
 REGLAS:
 - Extraer TODOS los estudios sin excepción
 - TAC → solo plantillas con "TAC". RM → solo plantillas con "RM" o "++RM". Nunca mezclar.
-- char_start y char_end deben delimitar EXACTAMENTE el fragmento de este estudio sin solapar con otros
 - Campos vacíos = "" nunca null`;
 
 function encontrarPlantillaMasCercana(tipoEstudio, region, esContrastado, conclusiones, hallazgos, templateNames) {
@@ -145,10 +139,8 @@ const tools = [{
               datos_clinicos: { type: 'string' },
               plantilla_match: { type: ['string', 'null'] },
               nombre_archivo_sugerido: { type: 'string' },
-              char_start: { type: 'number' },
-              char_end: { type: 'number' },
             },
-            required: ['nombre_paciente','tipo_estudio','region','lateralidad','es_contrastado','hallazgos','conclusiones','datos_clinicos','plantilla_match','nombre_archivo_sugerido','char_start','char_end'],
+            required: ['nombre_paciente','tipo_estudio','region','lateralidad','es_contrastado','hallazgos','conclusiones','datos_clinicos','plantilla_match','nombre_archivo_sugerido'],
             additionalProperties: false,
           },
         },
