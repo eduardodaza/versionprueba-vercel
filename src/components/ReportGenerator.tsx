@@ -322,17 +322,14 @@ export function ReportGenerator({
         const concIdx = hallazgos.search(/\*{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)/i);
         if (concIdx > hallazgos.length * 0.3) hallazgos = hallazgos.substring(0, concIdx).trim();
         // Quitar separador --- AUDIO --- del inicio si quedó
-        hallazgos = hallazgos.replace(/^---[^
-]+---\s*/m, '').trim();
+        hallazgos = hallazgos.replace(new RegExp('^---[^\\n]+---\\s*', 'm'), '').trim();
         estudiosDeEstaParte[0] = { ...estudiosDeEstaParte[0], hallazgos };
       } else if (estudiosDeEstaParte.length > 1) {
         // Múltiples estudios en el mismo bloque: dividir por conclusiones
-        const conclusionRegex = /\*{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[^*
-]*/gi;
+        const conclusionRegex = new RegExp('[*]{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[^*\n]*', 'gi');
         const posiciones: number[] = [];
         let mc: RegExpExecArray | null;
-        const tempRegex = new RegExp(conclusionRegex.source, 'gi');
-        while ((mc = tempRegex.exec(parte)) !== null) posiciones.push(mc.index);
+        while ((mc = conclusionRegex.exec(parte)) !== null) posiciones.push(mc.index);
 
         const bloques: string[] = [];
         let inicio = 0;
@@ -358,8 +355,7 @@ export function ReportGenerator({
           let hallazgos = bloques[ei] || parte;
           const ci = hallazgos.search(/\*{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)/i);
           if (ci > hallazgos.length * 0.3) hallazgos = hallazgos.substring(0, ci).trim();
-          hallazgos = hallazgos.replace(/^---[^
-]+---\s*/m, '').trim();
+          hallazgos = hallazgos.replace(new RegExp('^---[^\\n]+---\\s*', 'm'), '').trim();
           estudiosDeEstaParte[ei] = { ...estudio, hallazgos };
         });
       }
