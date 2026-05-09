@@ -292,7 +292,7 @@ module.exports.default = async function handler(req, res) {
         tools,
         tool_choice: { type: 'function', function: { name: 'parse_transcription_result' } },
         temperature: 0.1,
-        max_tokens: 8000,
+        max_tokens: 4000,
       }),
     });
 
