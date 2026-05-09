@@ -310,7 +310,61 @@ export function ReportGenerator({
         throw new Error(err.error || 'Error al analizar la transcripción');
       }
       const parsed = await response.json();
-      todosEstudios.push(...(parsed.estudios || []));
+      const estudiosDeEstaParte: ParsedStudy[] = parsed.estudios || [];
+
+      // Asignar hallazgos directamente desde el bloque de texto del frontend.
+      // Si el bloque tiene un solo estudio, ese estudio recibe el bloque completo.
+      // Si tiene múltiples estudios, dividimos el bloque por conclusiones.
+      if (estudiosDeEstaParte.length === 1) {
+        // Un solo estudio: el bloque completo es sus hallazgos
+        let hallazgos = parte;
+        // Quitar conclusiones del final
+        const concIdx = hallazgos.search(/\*{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)/i);
+        if (concIdx > hallazgos.length * 0.3) hallazgos = hallazgos.substring(0, concIdx).trim();
+        // Quitar separador --- AUDIO --- del inicio si quedó
+        hallazgos = hallazgos.replace(/^---[^
+]+---\s*/m, '').trim();
+        estudiosDeEstaParte[0] = { ...estudiosDeEstaParte[0], hallazgos };
+      } else if (estudiosDeEstaParte.length > 1) {
+        // Múltiples estudios en el mismo bloque: dividir por conclusiones
+        const conclusionRegex = /\*{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[^*
+]*/gi;
+        const posiciones: number[] = [];
+        let mc: RegExpExecArray | null;
+        const tempRegex = new RegExp(conclusionRegex.source, 'gi');
+        while ((mc = tempRegex.exec(parte)) !== null) posiciones.push(mc.index);
+
+        const bloques: string[] = [];
+        let inicio = 0;
+        for (let pi = 0; pi < posiciones.length && bloques.length < estudiosDeEstaParte.length - 1; pi++) {
+          // Fin del bloque: después de la conclusión, hasta doble salto o "siguiente"
+          const despues = parte.indexOf('
+', posiciones[pi] + 30);
+          let fin = parte.length;
+          if (despues !== -1) {
+            const ds = parte.indexOf('
+
+', despues);
+            const sp = parte.toLowerCase().indexOf('siguiente paciente', despues);
+            const cands = [ds, sp].filter(p => p > posiciones[pi] && p !== -1);
+            if (cands.length > 0) fin = Math.min(...cands);
+          }
+          bloques.push(parte.substring(inicio, fin).trim());
+          inicio = fin;
+        }
+        bloques.push(parte.substring(inicio).trim());
+
+        estudiosDeEstaParte.forEach((estudio, ei) => {
+          let hallazgos = bloques[ei] || parte;
+          const ci = hallazgos.search(/\*{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)/i);
+          if (ci > hallazgos.length * 0.3) hallazgos = hallazgos.substring(0, ci).trim();
+          hallazgos = hallazgos.replace(/^---[^
+]+---\s*/m, '').trim();
+          estudiosDeEstaParte[ei] = { ...estudio, hallazgos };
+        });
+      }
+
+      todosEstudios.push(...estudiosDeEstaParte);
       todosSinMatch.push(...(parsed.estudios_sin_match || []));
     }
 
