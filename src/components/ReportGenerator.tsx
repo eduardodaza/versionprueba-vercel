@@ -275,30 +275,24 @@ export function ReportGenerator({
     const templateNames = modoManual ? [] : plantillas.map(p => p.nombre);
 
     // Dividir por separadores --- AUDIO --- para procesar cada bloque por separado
-    // Esto evita que el LLM mezcle estudios de diferentes audios
-    const sepRegex = /---[^\n]+-{2,}/g;
-]+-{2,}/g;
+    const sepRegex = new RegExp('---[^\n]+-{2,}', 'g');
     const partes: string[] = [];
-    let lastIndex = 0;
-    let m: RegExpExecArray | null;
     const indices: number[] = [];
+    let m: RegExpExecArray | null;
 
     while ((m = sepRegex.exec(textoFinal)) !== null) {
       indices.push(m.index);
     }
 
     if (indices.length > 1) {
-      // Hay múltiples separadores — procesar bloque por bloque
       for (let i = 0; i < indices.length; i++) {
-        const sepEnd = textoFinal.indexOf('
-', indices[i]);
+        const sepEnd = textoFinal.indexOf('\n', indices[i]);
         const start = sepEnd !== -1 ? sepEnd + 1 : indices[i];
         const end = i + 1 < indices.length ? indices[i + 1] : textoFinal.length;
         const bloque = textoFinal.substring(start, end).trim();
         if (bloque.length > 30) partes.push(bloque);
       }
     } else {
-      // Sin separadores o solo uno — enviar todo junto
       partes.push(textoFinal);
     }
 
