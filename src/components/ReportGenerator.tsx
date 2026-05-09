@@ -325,32 +325,6 @@ export function ReportGenerator({
         hallazgos = hallazgos.replace(new RegExp('^---[^\\n]+---\\s*', 'm'), '').trim();
         estudiosDeEstaParte[0] = { ...estudiosDeEstaParte[0], hallazgos };
       } else if (estudiosDeEstaParte.length > 1) {
-        // Múltiples estudios en el mismo bloque: dividir por conclusiones
-        const conclusionRegex = new RegExp('[*]{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[^*\n]*', 'gi');
-        const posiciones: number[] = [];
-        let mc: RegExpExecArray | null;
-        while ((mc = conclusionRegex.exec(parte)) !== null) posiciones.push(mc.index);
-
-        const bloques: string[] = [];
-        let inicio = 0;
-        for (let pi = 0; pi < posiciones.length && bloques.length < estudiosDeEstaParte.length - 1; pi++) {
-          // Fin del bloque: después de la conclusión, hasta doble salto o "siguiente"
-          const despues = parte.indexOf(String.fromCharCode(10), posiciones[pi] + 30);
-          let fin = parte.length;
-          if (despues !== -1) {
-            const ds = parte.indexOf('
-
-', despues);
-            const sp = parte.toLowerCase().indexOf('siguiente paciente', despues);
-            const cands = [ds, sp].filter(p => p > posiciones[pi] && p !== -1);
-            if (cands.length > 0) fin = Math.min(...cands);
-          }
-          bloques.push(parte.substring(inicio, fin).trim());
-          inicio = fin;
-        }
-        bloques.push(parte.substring(inicio).trim());
-
-        estudiosDeEstaParte.forEach((estudio, ei) => {
           let hallazgos = bloques[ei] || parte;
           const ci = hallazgos.search(/\*{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)/i);
           if (ci > hallazgos.length * 0.3) hallazgos = hallazgos.substring(0, ci).trim();
