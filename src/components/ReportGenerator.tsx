@@ -276,7 +276,7 @@ export function ReportGenerator({
 
     // Dividir por separadores --- AUDIO --- para procesar cada bloque por separado
     // Esto evita que el LLM mezcle estudios de diferentes audios
-    const sepRegex = /---[^
+    const sepRegex = /---[^\n]+-{2,}/g;
 ]+-{2,}/g;
     const partes: string[] = [];
     let lastIndex = 0;
