@@ -325,13 +325,14 @@ export function ReportGenerator({
         hallazgos = hallazgos.replace(new RegExp('^---[^\\n]+---\\s*', 'm'), '').trim();
         estudiosDeEstaParte[0] = { ...estudiosDeEstaParte[0], hallazgos };
       } else if (estudiosDeEstaParte.length > 1) {
-          let hallazgos = bloques[ei] || parte;
-          const ci = hallazgos.search(/\*{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)/i);
-          if (ci > hallazgos.length * 0.3) hallazgos = hallazgos.substring(0, ci).trim();
-          hallazgos = hallazgos.replace(new RegExp('^---[^\\n]+---\\s*', 'm'), '').trim();
-          estudiosDeEstaParte[ei] = { ...estudio, hallazgos };
-        });
-      }
+          estudiosDeEstaParte.forEach((estudio, ei) => {
+            let hallazgos = parte;
+            const ci = hallazgos.search(new RegExp('[*]{0,2}(conclusi[oó]n|conclusiones)', 'i'));
+            if (ci > hallazgos.length * 0.3) hallazgos = hallazgos.substring(0, ci).trim();
+            hallazgos = hallazgos.replace(new RegExp('^---[^\\n]+---\\s*', 'm'), '').trim();
+            estudiosDeEstaParte[ei] = { ...estudio, hallazgos };
+          });
+        }
 
       todosEstudios.push(...estudiosDeEstaParte);
       todosSinMatch.push(...(parsed.estudios_sin_match || []));
