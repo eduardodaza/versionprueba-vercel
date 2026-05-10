@@ -157,50 +157,27 @@ const tools = [{
 function dividirPorEstudios(texto, numEstudios) {
   if (numEstudios <= 1) return [texto];
 
-  // Buscar todas las posiciones de conclusiones/impresión diagnóstica
-  const conclusionRegex = /\*{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[:\s*]*/gi;
+  const conclusionRegex = /[*]{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[^*]*/gi;
   const posiciones = [];
   let m;
   while ((m = conclusionRegex.exec(texto)) !== null) {
     posiciones.push(m.index);
   }
 
-  if (posiciones.length === 0) return [texto];
+  if (posiciones.length < numEstudios - 1) return Array(numEstudios).fill(texto);
 
-  // Si hay exactamente N-1 conclusiones para N estudios, usar como delimitadores
-  // La conclusión marca el FIN de ese estudio
   const bloques = [];
   let inicio = 0;
 
   for (let i = 0; i < posiciones.length && bloques.length < numEstudios - 1; i++) {
-    // Buscar el fin de la conclusión (hasta doble salto de línea o siguiente paciente)
-    let finConclusion = texto.length;
-    const despuesConclusion = texto.indexOf('\n', posiciones[i] + 50);
-    if (despuesConclusion !== -1) {
-      // Buscar doble salto o "siguiente paciente" o "paciente"
-      const dobleSalto = texto.indexOf('\n\n', despuesConclusion);
-      const siguientePaciente = texto.toLowerCase().indexOf('siguiente paciente', despuesConclusion);
-      const soloPaciente = texto.toLowerCase().indexOf('\npaciente ', despuesConclusion);
-      
-      const candidatos = [dobleSalto, siguientePaciente, soloPaciente].filter(p => p > posiciones[i]);
-      if (candidatos.length > 0) {
-        finConclusion = Math.min(...candidatos) + 1;
-      }
-    }
-    
-    bloques.push(texto.substring(inicio, finConclusion).trim());
-    inicio = finConclusion;
-  }
-  
-  // El último bloque es el resto del texto
-  if (inicio < texto.length) {
-    bloques.push(texto.substring(inicio).trim());
+    const finBloque = i + 1 < posiciones.length ? posiciones[i + 1] : texto.length;
+    bloques.push(texto.substring(inicio, finBloque).trim());
+    inicio = finBloque;
   }
 
-  // Si no pudimos dividir correctamente, devolver el texto completo para cada estudio
-  if (bloques.length < numEstudios) {
-    return Array(numEstudios).fill(texto);
-  }
+  bloques.push(texto.substring(inicio).trim());
+
+  if (bloques.length < numEstudios) return Array(numEstudios).fill(texto);
 
   return bloques;
 }
