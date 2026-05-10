@@ -2,8 +2,6 @@ module.exports.config = {
   api: { bodyParser: { sizeLimit: '2mb' } },
 };
 
-// El LLM extrae solo campos estructurados cortos.
-// hallazgos se toma directamente del texto transcrito para garantizar literalidad 100%.
 const systemPromptManual = `Parser de transcripciones radiológicas. Extrae TODOS los estudios via tool call.
 
 Campos por estudio:
@@ -46,44 +44,25 @@ function encontrarPlantillaMasCercana(tipoEstudio, region, esContrastado, conclu
   const esTAC = tipo.includes('tac');
 
   const reglas = [
-    { cuando: esRM && reg.includes('hombro') && (textoCompleto.includes('ruptura parcial') || textoCompleto.includes('rotura parcial')),
-      buscar: ['hombro', 'parcial'] },
-    { cuando: esRM && reg.includes('hombro') && (textoCompleto.includes('ruptura completa') || textoCompleto.includes('rotura completa')),
-      buscar: ['hombro', 'completa'] },
-    { cuando: esRM && reg.includes('hombro'),
-      buscar: ['hombro', 'tendinosis'] },
-    { cuando: esRM && reg.includes('rodilla') && (textoCompleto.includes('ruptura') || textoCompleto.includes('rotura') || textoCompleto.includes('desgarro')),
-      buscar: ['rodilla', 'lesion'] },
-    { cuando: esRM && reg.includes('rodilla'),
-      buscar: ['rodilla'] },
-    { cuando: esRM && (reg.includes('columna lumbar') || reg.includes('lumbar')),
-      buscar: ['lumbar'] },
-    { cuando: esRM && (reg.includes('columna cervical') || reg.includes('cervical')),
-      buscar: ['cervical'] },
-    { cuando: esRM && (reg.includes('columna dorsal') || reg.includes('dorsal')),
-      buscar: ['dorsal'] },
-    { cuando: esRM && (reg.includes('cerebro') || reg.includes('craneo') || reg.includes('cráneo') || reg.includes('encefalo')),
-      buscar: ['cerebro'] },
-    { cuando: esRM && reg.includes('abdomen'),
-      buscar: ['abdomen'] },
-    { cuando: esTAC && reg.includes('abdomen') && !textoCompleto.includes('simple'),
-      buscar: ['abdomen', 'contrastado'] },
-    { cuando: esTAC && reg.includes('abdomen') && textoCompleto.includes('simple'),
-      buscar: ['abdomen'] },
-    { cuando: esTAC && (reg.includes('torax') || reg.includes('tórax')) && !textoCompleto.includes('simple'),
-      buscar: ['torax', 'contrastado'] },
-    { cuando: esTAC && (reg.includes('torax') || reg.includes('tórax')) && textoCompleto.includes('simple'),
-      buscar: ['torax'] },
-    { cuando: esTAC && (reg.includes('toracoabdominal') || (reg.includes('torax') && reg.includes('abdomen'))),
-      buscar: ['toracoabdominal', 'contrastado'] },
-    { cuando: esTAC && (reg.includes('hombro') || reg.includes('tobillo') || reg.includes('rodilla') || reg.includes('pie') || reg.includes('mano') || reg.includes('muneca') || reg.includes('muñeca') || reg.includes('cadera') || reg.includes('codo')),
-      buscar: ['musculoesqueletico'] },
-    { cuando: esTAC && (reg.includes('craneo') || reg.includes('cráneo') || reg.includes('cerebro') || reg.includes('encefalo')),
-      buscar: ['craneo'] },
-    { cuando: esTAC && reg.includes('lumbar'),
-      buscar: ['lumbar'] },
-    { cuando: esTAC && reg.includes('cervical'),
-      buscar: ['cervical'] },
+    { cuando: esRM && reg.includes('hombro') && (textoCompleto.includes('ruptura parcial') || textoCompleto.includes('rotura parcial')), buscar: ['hombro', 'parcial'] },
+    { cuando: esRM && reg.includes('hombro') && (textoCompleto.includes('ruptura completa') || textoCompleto.includes('rotura completa')), buscar: ['hombro', 'completa'] },
+    { cuando: esRM && reg.includes('hombro'), buscar: ['hombro', 'tendinosis'] },
+    { cuando: esRM && reg.includes('rodilla') && (textoCompleto.includes('ruptura') || textoCompleto.includes('rotura') || textoCompleto.includes('desgarro')), buscar: ['rodilla', 'lesion'] },
+    { cuando: esRM && reg.includes('rodilla'), buscar: ['rodilla'] },
+    { cuando: esRM && (reg.includes('columna lumbar') || reg.includes('lumbar')), buscar: ['lumbar'] },
+    { cuando: esRM && (reg.includes('columna cervical') || reg.includes('cervical')), buscar: ['cervical'] },
+    { cuando: esRM && (reg.includes('columna dorsal') || reg.includes('dorsal')), buscar: ['dorsal'] },
+    { cuando: esRM && (reg.includes('cerebro') || reg.includes('craneo') || reg.includes('cráneo') || reg.includes('encefalo')), buscar: ['cerebro'] },
+    { cuando: esRM && reg.includes('abdomen'), buscar: ['abdomen'] },
+    { cuando: esTAC && reg.includes('abdomen') && !textoCompleto.includes('simple'), buscar: ['abdomen', 'contrastado'] },
+    { cuando: esTAC && reg.includes('abdomen') && textoCompleto.includes('simple'), buscar: ['abdomen'] },
+    { cuando: esTAC && (reg.includes('torax') || reg.includes('tórax')) && !textoCompleto.includes('simple'), buscar: ['torax', 'contrastado'] },
+    { cuando: esTAC && (reg.includes('torax') || reg.includes('tórax')) && textoCompleto.includes('simple'), buscar: ['torax'] },
+    { cuando: esTAC && (reg.includes('toracoabdominal') || (reg.includes('torax') && reg.includes('abdomen'))), buscar: ['toracoabdominal', 'contrastado'] },
+    { cuando: esTAC && (reg.includes('hombro') || reg.includes('tobillo') || reg.includes('rodilla') || reg.includes('pie') || reg.includes('mano') || reg.includes('muneca') || reg.includes('muñeca') || reg.includes('cadera') || reg.includes('codo')), buscar: ['musculoesqueletico'] },
+    { cuando: esTAC && (reg.includes('craneo') || reg.includes('cráneo') || reg.includes('cerebro') || reg.includes('encefalo')), buscar: ['craneo'] },
+    { cuando: esTAC && reg.includes('lumbar'), buscar: ['lumbar'] },
+    { cuando: esTAC && reg.includes('cervical'), buscar: ['cervical'] },
   ];
 
   for (const regla of reglas) {
@@ -152,27 +131,73 @@ const tools = [{
   },
 }];
 
-// Divide el texto en segmentos por estudio usando las conclusiones como delimitadores.
-// Funciona cuando un audio contiene múltiples estudios dictados seguidos.
+// Divide el texto en bloques por estudio.
+// Reglas de corte (en orden de prioridad):
+// 1. "siguiente paciente" precedido de conclusión
+// 2. "el mismo" / "el siguiente" precedido de conclusión  
+// 3. Doble salto de línea + nombre propio (2+ palabras capitalizadas)
 function dividirPorEstudios(texto, numEstudios) {
   if (numEstudios <= 1) return [texto];
 
-  // Cada bloque termina DESPUES de su conclusion
-  const conclusionRegex = /[*]{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[^\n]*/gi;
-  const fins = [];
-  let m;
-  while ((m = conclusionRegex.exec(texto)) !== null) {
-    fins.push(m.index + m[0].length);
+  const textoLower = texto.toLowerCase();
+  const splits = [];
+
+  // Buscar indicadores de nuevo estudio: "siguiente paciente", "el mismo", "el siguiente paciente"
+  const patronesNuevoEstudio = [
+    'siguiente paciente',
+    'el mismo tiene',
+    'el mismo paciente',
+    'el siguiente paciente',
+  ];
+
+  for (const patron of patronesNuevoEstudio) {
+    let pos = 0;
+    while (true) {
+      const idx = textoLower.indexOf(patron, pos);
+      if (idx === -1) break;
+      // Verificar que haya una conclusión en algún lugar antes
+      const antes = textoLower.substring(0, idx);
+      if (antes.includes('conclusi') || antes.includes('impresi')) {
+        splits.push(idx);
+      }
+      pos = idx + 1;
+    }
   }
 
-  if (fins.length < numEstudios - 1) return Array(numEstudios).fill(texto);
+  // También buscar doble salto de línea seguido de nombre propio (mayúscula + apellidos)
+  // Solo si hay conclusión antes en el texto
+  const doblesSaltos = [];
+  let pos = 0;
+  while (true) {
+    const idx = texto.indexOf('\n\n', pos);
+    if (idx === -1) break;
+    const despues = texto.substring(idx + 2, idx + 100).trim();
+    const palabras = despues.split(/\s+/).slice(0, 4);
+    const conMayuscula = palabras.filter(p => p.length > 1 && p[0] === p[0].toUpperCase() && p[0] !== p[0].toLowerCase());
+    if (conMayuscula.length >= 2) {
+      const antes = textoLower.substring(0, idx);
+      if (antes.includes('conclusi') || antes.includes('impresi')) {
+        doblesSaltos.push(idx + 2);
+      }
+    }
+    pos = idx + 1;
+  }
 
+  // Combinar y ordenar splits
+  const todosLosSplits = [...new Set([...splits, ...doblesSaltos])].sort((a, b) => a - b);
+
+  if (todosLosSplits.length === 0) return Array(numEstudios).fill(texto);
+
+  // Generar bloques
   const bloques = [];
   let inicio = 0;
 
-  for (let i = 0; i < fins.length && bloques.length < numEstudios - 1; i++) {
-    bloques.push(texto.substring(inicio, fins[i]).trim());
-    inicio = fins[i];
+  for (let i = 0; i < todosLosSplits.length && bloques.length < numEstudios - 1; i++) {
+    const bloque = texto.substring(inicio, todosLosSplits[i]).trim();
+    if (bloque.length > 20) {
+      bloques.push(bloque);
+      inicio = todosLosSplits[i];
+    }
   }
 
   bloques.push(texto.substring(inicio).trim());
@@ -182,19 +207,17 @@ function dividirPorEstudios(texto, numEstudios) {
   return bloques;
 }
 
-
 function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
   if (!estudios || estudios.length === 0) return estudios;
 
-  // Dividir el texto en bloques según número de estudios
   const bloques = dividirPorEstudios(transcriptionText, estudios.length);
 
   return estudios.map((estudio, i) => {
     let fragmento = bloques[i] || transcriptionText;
 
     // Quitar conclusiones del final
-    const conclusionRegex = /\*{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[:\s*]*/gi;
-    const match = [...fragmento.matchAll(conclusionRegex)].pop();
+    const conclusionRegex = /[*]{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[^]*/i;
+    const match = fragmento.match(conclusionRegex);
     if (match && match.index > fragmento.length * 0.4) {
       fragmento = fragmento.substring(0, match.index).trim();
     }
@@ -210,8 +233,11 @@ function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
       }
     }
 
-    // Limpiar separadores --- AUDIO --- si quedaron al inicio
-    fragmento = fragmento.replace(/^---[^\n]+---\s*/m, '').trim();
+    // Limpiar separador --- AUDIO --- si quedó al inicio
+    if (fragmento.startsWith('---')) {
+      const newline = fragmento.indexOf('\n');
+      if (newline !== -1) fragmento = fragmento.substring(newline + 1).trim();
+    }
 
     return { ...estudio, hallazgos: fragmento || transcriptionText };
   });
