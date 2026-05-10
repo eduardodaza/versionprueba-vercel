@@ -157,22 +157,22 @@ const tools = [{
 function dividirPorEstudios(texto, numEstudios) {
   if (numEstudios <= 1) return [texto];
 
-  const conclusionRegex = /[*]{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[^*]*/gi;
-  const posiciones = [];
+  // Cada bloque termina DESPUES de su conclusion
+  const conclusionRegex = /[*]{0,2}(conclusi[oó]n|conclusiones|impresi[oó]n diagn[oó]stica)[^\n]*/gi;
+  const fins = [];
   let m;
   while ((m = conclusionRegex.exec(texto)) !== null) {
-    posiciones.push(m.index);
+    fins.push(m.index + m[0].length);
   }
 
-  if (posiciones.length < numEstudios - 1) return Array(numEstudios).fill(texto);
+  if (fins.length < numEstudios - 1) return Array(numEstudios).fill(texto);
 
   const bloques = [];
   let inicio = 0;
 
-  for (let i = 0; i < posiciones.length && bloques.length < numEstudios - 1; i++) {
-    const finBloque = i + 1 < posiciones.length ? posiciones[i + 1] : texto.length;
-    bloques.push(texto.substring(inicio, finBloque).trim());
-    inicio = finBloque;
+  for (let i = 0; i < fins.length && bloques.length < numEstudios - 1; i++) {
+    bloques.push(texto.substring(inicio, fins[i]).trim());
+    inicio = fins[i];
   }
 
   bloques.push(texto.substring(inicio).trim());
@@ -182,7 +182,7 @@ function dividirPorEstudios(texto, numEstudios) {
   return bloques;
 }
 
-// Extrae hallazgos directamente del texto dividiéndolo por conclusiones.
+
 function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
   if (!estudios || estudios.length === 0) return estudios;
 
