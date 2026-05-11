@@ -174,8 +174,7 @@ function dividirPorEstudios(texto, numEstudios, nombresPacientes) {
   }
 
   // REGLA 1: separadores --- AUDIO ---
-  const sepRegex = /---[^
-]+-{2,}/g;
+  const sepRegex = /---[^\n]+-{2,}/g;
   let m;
   const separadores = [];
   while ((m = sepRegex.exec(texto)) !== null) {
@@ -280,8 +279,7 @@ function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
     for (const kw of datosKeywords) {
       const idx = fragmento.toLowerCase().indexOf(kw);
       if (idx !== -1 && idx < 150) {
-        const newline = fragmento.indexOf('
-', idx);
+        const newline = fragmento.indexOf('\n', idx);
         if (newline !== -1) fragmento = fragmento.substring(newline + 1).trim();
         break;
       }
@@ -289,8 +287,7 @@ function extraerHallazgosDesdeTexto(transcriptionText, estudios) {
 
     // Limpiar separador --- AUDIO --- si quedo al inicio
     if (fragmento.startsWith('---')) {
-      const newline = fragmento.indexOf('
-');
+      const newline = fragmento.indexOf('\n');
       if (newline !== -1) fragmento = fragmento.substring(newline + 1).trim();
     }
 
